@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERLC Stream Overlay</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="overlay-container" style="margin-top: 75px;"> 
+        <div class="server-info-container">
+            <div class="server-info">
+                <div class="status-indicator status-loading" id="status-indicator"></div>
+                <div class="info-label">Players:</div>
+                <div class="info-value" id="player-count">Loading...</div>
+                <div class="info-value" id="max-player-count" style="display: none;">Max Players: Loading...</div>
+                <div class="info-value" id="team-counts" style="display: none;">
+                    <span class="team-count civilian" id="civilian-count">0</span>
+                    <span class="team-count police" id="police-count">0</span>
+                    <span class="team-count sheriff" id="sheriff-count">0</span>
+                    <span class="team-count fire" id="fire-count">0</span>
+                    <span class="team-count dot" id="dot-count">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="server-info-container" style="margin-top: 15px;">
+            <div class="server-info">
+                <div class="info-label">Server Code:</div>
+                <div class="info-value server-code" id="server-code">Loading...</div>
+            </div>
+        </div>
+
+        <div class="server-info-container" style="margin-top: 15px;">
+            <div class="server-info">
+                <div class="info-label">Discord:</div>
+                <div class="info-value">nycrpg</div>
+            </div>
+        </div>
+
+        <div class="message-display" id="message-display">
+            API connection error. Please check your API key.
+        </div>
+    </div>
+
+    <script>
+        const config = {
+            refreshInterval: 30000 // In milliseconds
+        };
+
+        const serverCodeElement = document.getElementById('server-code');
+        const playerCountElement = document.getElementById('player-count');
+        const maxPlayerCountElement = document.getElementById('max-player-count');
+        const statusIndicator = document.getElementById('status-indicator');
+        const messageDisplay = document.getElementById('message-display');
+        const teamCountsElement = document.getElementById('team-counts');
+        const civilianCountElement = document.getElementById('civilian-count');
+        const policeCountElement = document.getElementById('police-count');
+        const sheriffCountElement = document.getElementById('sheriff-count');
+        const fireCountElement = document.getElementById('fire-count');
+        const dotCountElement = document.getElementById('dot-count');
+
+        let maxPlayers = 'N/A';
+
+        function showMessage(message, duration = 20000) {
+            messageDisplay.textContent = message;
+            messageDisplay.classList.add('show');
+            
+            setTimeout(() => {
+                messageDisplay.classList.remove('show');
+            }, duration);
+        }
+
+        function updateStatus(status) {
+            statusIndicator.classList.remove('status-online', 'status-offline', 'status-loading');
+            
+            switch(status) {
+                case 'online':
+                    statusIndicator.classList.add('status-online');
+                    break;
+                case 'offline':
+                    statusIndicator.classList.add('status-offline');
+                    break;
+                default:
+                    statusIndicator.classList.add('status-loading');
+                    break;
+            }
+        }
+
+        function updateTeamCounts(data) {
+            civilianCountElement.textContent = data.Civilian || 0;
+            policeCountElement.textContent = data.Police || 0;
+            sheriffCountElement.textContent = data.Sheriff || 0;
+            fireCountElement.textContent = data.Fire || 0;
+            dotCountElement.textContent = data.DOT || 0;
+            playerCountElement.textContent = `${data.TotalPlayers || 0} / ${maxPlayers}`;
+            teamCountsElement.style.display = 'inline';
+        }
+
+        async function fetchServerData() {
+            try {
+                updateStatus('loading');
+                
+                const response = await fetch('/api/server-data');
+                
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                serverCodeElement.textContent = data.JoinKey || 'N/A';
+                maxPlayers = data.MaxPlayers || '40';
+                updateStatus('online');
+                
+                console.log('Server data updated successfully');
+            } catch (error) {
+                console.error('Error fetching server data:', error);
+                updateStatus('offline');
+                showMessage(`API Error: ${error.message}. Retrying...`);
+                
+                serverCodeElement.textContent = 'ERROR';
+                maxPlayerCountElement.textContent = 'Max Players: ERROR';
+            }
+        }
+
+        async function fetchPlayerData() {
+            try {
+                updateStatus('loading');
+                
+                const response = await fetch('/api/player-data');
+                
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+
+                updateTeamCounts(data);
+                
+                console.log('Player data updated successfully');
+
+                updateStatus('online');
+            } catch (error) {
+                console.error('Error fetching player data:', error);
+                updateStatus('offline');
+                showMessage(`API Error: ${error.message}. Retrying...`);
+                
+                teamCountsElement.textContent = 'ERROR';
+            }
+        }
+
+        // Initialize
+        window.onload = function() {
+            fetchServerData();
+            fetchPlayerData();
+                
+            setInterval(fetchPlayerData, config.refreshInterval);
+        };
+    </script>
+</body>
+</html>
